@@ -1,0 +1,61 @@
+services:
+  # FastAPI Backend Service
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-chatbot-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - VECTOR_DB_PATH=/app/chroma_db
+      - COLLECTION_NAME=transactions
+      - LLM_MODEL=models/gemini-2.5-flash
+      - EMBEDDING_MODEL=models/text-embedding-004
+      - TEMPERATURE=0
+      - TOP_K_RESULTS=3
+    volumes:
+      # Persist ChromaDB data
+      - chroma_data:/app/chroma_db
+      # Mount source code for development (comment out for production)
+      - ./src:/app/src
+      - ./transactions.json:/app/transactions.json
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    networks:
+      - rag-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Streamlit UI Service
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: rag-chatbot-streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - ./streamlit_app.py:/app/streamlit_app.py
+    restart: unless-stopped
+    networks:
+      - rag-network
+    depends_on:
+      - fastapi
+
+# Named volumes for data persistence
+volumes:
+  chroma_data:
+    driver: local
+
+# Custom network
+networks:
+  rag-network:
+    driver: bridge

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chatbot - Transactional Data</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: #333; margin-bottom: 10px; }
+        .header p { color: #666; }
+        .chat-container { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .chat-header { background: #4CAF50; color: white; padding: 15px; border-radius: 10px 10px 0 0; }
+        .chat-messages { height: 400px; overflow-y: auto; padding: 20px; border-bottom: 1px solid #eee; }
+        .message { margin-bottom: 15px; }
+        .user-message { text-align: right; }
+        .bot-message { text-align: left; }
+        .message-bubble { display: inline-block; padding: 10px 15px; border-radius: 20px; max-width: 70%; }
+        .user-bubble { background: #007bff; color: white; }
+        .bot-bubble { background: #f1f1f1; color: #333; }
+        .input-container { padding: 20px; display: flex; gap: 10px; }
+        .input-container input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 25px; outline: none; }
+        .input-container button { padding: 12px 25px; background: #007bff; color: white; border: none; border-radius: 25px; cursor: pointer; }
+        .input-container button:hover { background: #0056b3; }
+        .examples { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px; }
+        .examples h3 { margin-bottom: 15px; color: #333; }
+        .example-btn { display: inline-block; margin: 5px; padding: 8px 15px; background: #e9ecef; border: none; border-radius: 20px; cursor: pointer; font-size: 14px; }
+        .example-btn:hover { background: #007bff; color: white; }
+        .loading { display: none; text-align: center; padding: 10px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 RAG-Powered Transactional Chatbot</h1>
+            <p>Ask questions about customer transactions using natural language!</p>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-header">
+                <h3>💬 Transaction Assistant</h3>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot-message">
+                    <div class="message-bubble bot-bubble">
+                        Hello! I'm your transaction assistant. Ask me anything about customer purchases, spending, or transaction history.
+                    </div>
+                </div>
+            </div>
+            <div class="loading" id="loading">🤖 Thinking...</div>
+            <div class="input-container">
+                <input type="text" id="messageInput" placeholder="Ask about transactions..." onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <div class="examples">
+            <h3>💡 Example Questions:</h3>
+            <button class="example-btn" onclick="setExample('What is Amit\\'s total spending?')">What is Amit's total spending?</button>
+            <button class="example-btn" onclick="setExample('Show me Riya\\'s purchase history')">Show me Riya's purchase history</button>
+            <button class="example-btn" onclick="setExample('List all transactions for February 2024')">List all transactions for February 2024</button>
+            <button class="example-btn" onclick="setExample('Which product was purchased most often?')">Which product was purchased most often?</button>
+            <button class="example-btn" onclick="setExample('What did Karan buy?')">What did Karan buy?</button>
+        </div>
+    </div>
+
+    <script>
+        function addMessage(message, isUser) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `message-bubble ${isUser ? 'user-bubble' : 'bot-bubble'}`;
+            bubbleDiv.textContent = message;
+            
+            messageDiv.appendChild(bubbleDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage(message, true);
+            input.value = '';
+            showLoading(true);
+            
+            try {
+                const response = await fetch('http://localhost:8000/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: message,
+                        use_memory: false
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addMessage(data.answer, false);
+                } else {
+                    addMessage(`Error: ${data.detail}`, false);
+                }
+            } catch (error) {
+                addMessage(`Connection error: ${error.message}`, false);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function setExample(text) {
+            document.getElementById('messageInput').value = text;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>
