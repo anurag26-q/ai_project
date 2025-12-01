@@ -39,13 +39,13 @@ class RAGChatbot:
         print(f'llm_model : {self.llm_model}')
         self.temperature = float(os.getenv("TEMPERATURE", temperature))
         print(f'temperature : {self.temperature}')
-        self.top_k = int(os.getenv("TOP_K_RESULTS", 5))  # Increased default for better retrieval
+        self.top_k = int(os.getenv("TOP_K_RESULTS", 50))  # Maximum retrieval for comprehensive queries
         print(f'top_k : {self.top_k}')
         
         # Initialize vector store manager
         if vector_store_manager is None:
             from src.vector_store import setup_vector_store
-            self.vector_store_manager = setup_vector_store()
+            self.vector_store_manager = setup_vector_store(force_recreate=True)
         else:
             self.vector_store_manager = vector_store_manager
         
@@ -85,21 +85,38 @@ class RAGChatbot:
     
     def _get_qa_prompt(self) -> ChatPromptTemplate:
         """Get the QA prompt template for the retrieval chain."""
-        template = """You are an intelligent transaction assistant that understands natural language queries about customer purchases and spending, even when they contain typos or grammatical errors.
+        template = """You are a transaction assistant. Use ALL transaction data in the context to answer questions accurately.
 
 Transaction Context:
 {context}
 
 User Question: {question}
 
-Instructions:
-- Understand the user's intent despite any spelling mistakes or grammatical errors
-- For spending questions, calculate totals by summing all transaction amounts for the customer
-- For purchase history questions, list all transactions with product names, amounts (₹), and dates
-- If a customer name appears in different cases or with typos, match it intelligently
-- If no data exists for a customer/product, clearly state that no transactions were found for that specific customer or product in the database
-- Always format currency with ₹ symbol
-- Be conversational and helpful
+IMPORTANT RULES:
+- For "all customers" or "total spending" queries: You MUST include EVERY customer and EVERY transaction found in the context above
+- For individual customer queries: Find ALL transactions for that specific customer
+- Always list every transaction found in the context - do not skip any
+- Show complete calculations with customer names, products, amounts, and dates
+- Group transactions by customer when showing totals
+- Format amounts in Indian Rupees (Rs.) with proper formatting
+- If the context contains multiple transactions, list them ALL in your answer
+
+ANSWER FORMAT FOR "ALL CUSTOMERS" QUERIES:
+1. List each customer with their transactions
+2. Show the total for each customer
+3. Calculate and show the grand total at the end
+
+Example for comprehensive queries:
+"Here are all the transactions:
+
+Amit:
+- 2024-01-12: Laptop - Rs.55,000
+- 2024-02-15: Mouse - Rs.700
+Total for Amit: Rs.55,700
+
+[... continue for ALL customers in context ...]
+
+Grand Total: Rs.[sum of all]"
 
 Answer:"""
         
@@ -109,7 +126,8 @@ Answer:"""
 
     def query(self, question: str) -> Dict[str, Any]:
         """
-        Answer a question using RAG with memory.
+        Answer a question using RAG with intelligent, dynamic retrieval and conversation memory.
+        The system automatically retrieves all documents and lets the LLM decide what to use.
         
         Args:
             question: User's question
@@ -120,13 +138,77 @@ Answer:"""
                 - source_documents: Retrieved documents used as context
         """
         try:
-            result = self.chain({"question": question})
+            # Always retrieve ALL transactions and let the LLM intelligently use what it needs
+            # This removes the need for static keyword matching
+            all_docs = self.vector_store_manager.vectorstore.similarity_search(
+                question, 
+                k=14  # Retrieve all 14 transactions - let LLM decide what's relevant
+            )
+            
+            # Create context from all documents
+            context = "\n\n".join([doc.page_content for doc in all_docs])
+            
+            # Get conversation history
+            chat_history = self.memory.load_memory_variables({}).get("chat_history", [])
+            
+            # Format chat history for the prompt
+            history_text = ""
+            if chat_history:
+                history_text = "\n\nPrevious Conversation:\n"
+                for msg in chat_history[-6:]:  # Last 3 exchanges (6 messages)
+                    role = "User" if msg.type == "human" else "Assistant"
+                    history_text += f"{role}: {msg.content}\n"
+            
+            # Use enhanced prompt that guides the LLM to use appropriate level of detail
+            prompt = ChatPromptTemplate.from_template(
+                """You are an intelligent transaction assistant with access to all transaction data.
+{history}
+Available Transaction Data:
+{context}
+
+Current Question: {question}
+
+Think step-by-step:
+1. Check if this is a follow-up question referring to previous conversation
+2. What is the user asking for? (specific customer, comparison, total, analysis, etc.)
+3. Which transactions are relevant to answer this question?
+4. What level of detail does the user want? (concise summary vs detailed breakdown)
+
+Response Guidelines:
+- If this is a follow-up question, use context from previous conversation
+- For simple "total" or "how much" questions: Provide a concise answer with just the final number
+- For "show me" or "list" questions: Provide detailed breakdown
+- For "all customers" with "list each": Show complete breakdown by customer
+- For comparisons or rankings: Show relevant comparisons
+- Always be accurate and use all relevant data
+- Use Indian Rupee format: Rs.X,XXX or ₹X,XXX
+
+Answer the question appropriately:"""
+            )
+            
+            chain = prompt | self.llm | StrOutputParser()
+            answer = chain.invoke({
+                "context": context, 
+                "question": question,
+                "history": history_text
+            })
+            
+            # Save to memory
+            self.memory.save_context(
+                {"question": question},
+                {"answer": answer}
+            )
+            
             return {
-                "answer": result["answer"],
-                "source_documents": result["source_documents"],
-                "sources": [doc.metadata for doc in result["source_documents"]]
+                "answer": answer,
+                "source_documents": all_docs,
+                "sources": [doc.metadata for doc in all_docs]
             }
+            
         except Exception as e:
+            print(f"[ERROR] Query failed: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "answer": "I'm sorry, I encountered an error processing your question. Please try again.",
                 "source_documents": [],

@@ -93,19 +93,28 @@ class VectorStoreManager:
         transaction_texts = get_all_transaction_texts()
         transaction_metadata = get_transaction_metadata()
         
-        # Create Document objects with metadata
+        # Create Document objects with metadata and unique IDs
         documents = [
             Document(
                 page_content=text,
-                metadata=metadata
+                metadata={**metadata, "doc_id": f"txn_{metadata['id']}"}
             )
             for text, metadata in zip(transaction_texts, transaction_metadata)
         ]
         
         print(f"Ingesting {len(documents)} transactions into vector store...")
         
-        # Add documents to vector store
-        self.vectorstore.add_documents(documents)
+        # Clear existing data to prevent duplicates
+        self.vectorstore.delete_collection()
+        self.vectorstore = Chroma(
+            persist_directory=self.persist_directory,
+            embedding_function=self.embeddings,
+            collection_name=self.collection_name
+        )
+        
+        # Add documents to vector store with unique IDs
+        ids = [f"txn_{metadata['id']}" for metadata in transaction_metadata]
+        self.vectorstore.add_documents(documents, ids=ids)
         
         # Persist to disk
         self.vectorstore.persist()
@@ -126,8 +135,8 @@ class VectorStoreManager:
             self.initialize_store()
         
         return self.vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": top_k}
+            search_type="mmr",
+            search_kwargs={"k": top_k, "fetch_k": 50}
         )
     
     def retrieve_transactions(self, query: str, top_k: int = 3) -> List[Document]:
