@@ -4,6 +4,7 @@ services:
     name: rag-chatbot-api
     runtime: docker
     dockerfilePath: ./Dockerfile
+    dockerContext: ./
     envVars:
       - key: GOOGLE_API_KEY
         sync: false
@@ -33,6 +34,7 @@ services:
     name: rag-chatbot-streamlit
     runtime: docker
     dockerfilePath: ./Dockerfile.streamlit
+    dockerContext: ./
     envVars:
       - key: GOOGLE_API_KEY
         sync: false
