@@ -70,7 +70,34 @@ A production-ready **Retrieval-Augmented Generation (RAG) chatbot** built with *
 
 ## 🚀 Usage
 
-### Option A: Docker (Recommended)
+### Option A: Deploy to Render (Production) ☁️
+
+**Deploy to the cloud in 5 minutes!**
+
+```bash
+# 1. Push to Git
+git add .
+git commit -m "Deploy to Render"
+git push origin main
+
+# 2. Create Blueprint on Render
+# - Go to https://dashboard.render.com/
+# - Click "New +" → "Blueprint"
+# - Connect your repository
+# - Set GOOGLE_API_KEY in environment variables
+
+# 3. Access your deployed app!
+# Streamlit UI: https://rag-chatbot-streamlit.onrender.com
+# FastAPI: https://rag-chatbot-api.onrender.com
+```
+
+📚 **Deployment Guides:**
+- **Quick Start**: [RENDER_QUICKSTART.md](RENDER_QUICKSTART.md) - 5-minute deployment
+- **Full Guide**: [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) - Comprehensive documentation
+
+---
+
+### Option B: Docker (Recommended for Local)
 
 **Easiest way to get started!**
 
@@ -91,7 +118,7 @@ See [DOCKER.md](DOCKER.md) for detailed Docker instructions.
 
 ---
 
-### Option B: Local Installation
+### Option C: Local Installation
 
 ### Option 1: FastAPI Backend
 
