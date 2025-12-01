@@ -26,7 +26,8 @@ if "input_key" not in st.session_state:
 
 
 # ---------------- API Config ----------------
-API_BASE = os.getenv("API_BASE", "http://localhost:8000")
+# Support both FASTAPI_URL (Render) and API_BASE (legacy) for backwards compatibility
+API_BASE = os.getenv("FASTAPI_URL", os.getenv("API_BASE", "http://localhost:8000"))
 
 
 def get_transactions():
@@ -104,9 +105,18 @@ def create_customer_chart(df: pd.DataFrame):
 # ---------------- API Health Check ----------------
 def check_api_status():
     global API_BASE
-    endpoints = ["http://fastapi:8000", "http://localhost:8000", API_BASE]
-
+    # Check configured URL first (Render/production), then Docker, then localhost
+    endpoints = [API_BASE, "http://fastapi:8000", "http://localhost:8000"]
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_endpoints = []
     for endpoint in endpoints:
+        if endpoint not in seen:
+            seen.add(endpoint)
+            unique_endpoints.append(endpoint)
+
+    for endpoint in unique_endpoints:
         try:
             response = requests.get(f"{endpoint}/health", timeout=5)
             if response.status_code == 200:
